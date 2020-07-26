@@ -1,35 +1,93 @@
-// setup
-const drawingContainer = create("svg");
-document.body.append(drawingContainer);
-const delayTime = 0.1; // seconds
-const maxCircles = 100;
-let count = 0;
-let timeOfLastFrame = 0;
-window.requestAnimationFrame(animateCircles);
-
-//--- end of "script" ---
-//--- start function library ---
+const animation = makeAnimation({
+  delayTime: 0.05,
+  maxCircles: 10,
+  container: document.body,
+});
+animation.start();
 
 /**
- * Main animation function
- * @param {number} timestamp
+ * @typedef {Object} AnimationConfig
+ * @property {number} delayTime - seconds until a new circle appears
+ * @property {number} maxCircles - maximum circles to have in SVG at same time
+ * @property {HTMLElement} container - a <svg> will be added to this element
  */
-function animateCircles(timestamp) {
-  const elapsed = timestamp - timeOfLastFrame;
-  // TODO add a time based condition to this animation for consistency
-  Array.from(drawingContainer.querySelectorAll("circle")).forEach(
-    moveDownAndLeft
-  );
-  if (timeOfLastFrame !== 0 && elapsed < delayTime * 1000) {
-    return window.requestAnimationFrame(animateCircles);
-  }
-  timeOfLastFrame = timestamp;
-  ++count;
-  if (count > maxCircles) {
-    drawingContainer.removeChild(drawingContainer.firstChild);
-  }
-  drawingContainer.append(createRandomCircle());
-  window.requestAnimationFrame(animateCircles);
+
+/**
+ * main function, holds the animation state, sets keyboard listeners
+ * @param {AnimationConfig} config
+ */
+function makeAnimation(config) {
+  const drawingContainer = create("svg");
+  config.container.append(drawingContainer);
+
+  const frameRate = 1 / 60; // 60 frames per second
+  let count = 0;
+  let dx = -1;
+  let dy = 1;
+  let frame = 0;
+  let lastTimestamp = 0;
+  let stopped = false;
+
+  const animation = (timestamp) => {
+    if (stopped) return;
+    const elapsed = timestamp - lastTimestamp;
+    if (elapsed < frameRate * 1000)
+      return window.requestAnimationFrame(animation);
+    lastTimestamp = timestamp;
+    frame++;
+    Array.from(drawingContainer.querySelectorAll("circle")).forEach((circle) =>
+      applyAttributes(circle, {
+        cx: +circle.getAttribute("cx") + dx,
+        cy: +circle.getAttribute("cy") + dy,
+      })
+    );
+    if (frame % framesPerAnimation(frameRate, config.delayTime) === 0) {
+      ++count;
+      if (count > config.maxCircles) {
+        drawingContainer.removeChild(drawingContainer.firstChild);
+      }
+      drawingContainer.append(createRandomCircle());
+    }
+    window.requestAnimationFrame(animation);
+  };
+
+  const handleKeydown = ({ key, shiftKey }) => {
+    switch (key) {
+      case " ":
+        stopped = !stopped;
+        if (!stopped) window.requestAnimationFrame(animation);
+        return;
+      case "j":
+      case "ArrowDown":
+        if (shiftKey) config.delayTime += 0.1;
+        else ++dy;
+        return;
+      case "k":
+      case "ArrowUp":
+        if (shiftKey) {
+          if (config.delayTime > 0.1) config.delayTime -= 0.1;
+        } else --dy;
+        return;
+      case "h":
+      case "ArrowLeft":
+        --dx;
+        return;
+      case "l":
+      case "ArrowRight":
+        ++dx;
+        return;
+      default:
+        return;
+    }
+  };
+
+  config.container.addEventListener("keydown", handleKeydown);
+
+  return {
+    start: () => {
+      window.requestAnimationFrame(animation);
+    },
+  };
 }
 
 function applyAttributes(el, attributes = {}) {
@@ -70,6 +128,16 @@ function createRandomCircle() {
 }
 
 /**
+ * Helper to use a delay in seconds with frames
+ * @param {number} frameRate
+ * @param {number} delay
+ * @returns {number} frames per animation
+ */
+function framesPerAnimation(frameRate, delay) {
+  return Math.floor(delay / frameRate);
+}
+
+/**
  * Helper for the `create` function to register which names are SVG
  * @param {string} name
  * @returns {boolean}
@@ -82,15 +150,6 @@ function isSvgName(name) {
     default:
       return false;
   }
-}
-
-/**
- *
- * @param {SVGCircleElement} circle
- */
-function moveDownAndLeft(circle) {
-  circle.setAttribute("cy", +circle.getAttribute("cy") + 1);
-  circle.setAttribute("cx", +circle.getAttribute("cx") - 1);
 }
 
 function randomRange({ min = 1, max = 10 } = {}) {
